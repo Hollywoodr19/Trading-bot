@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ crypto_name }} Details | Trading Bot</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white flex flex-col items-center min-h-screen">
+    <div class="container mt-6 w-full max-w-2xl bg-gray-800 p-6 rounded-md shadow-md text-center">
+        <h1 class="text-3xl font-bold text-yellow-400">{{ crypto_name }}</h1>
+        <p class="text-xl mt-2">Preis: <span id="cryptoPrice">Lädt...</span> €</p>
+        <p class="text-xl">Handelsvolumen: <span id="cryptoVolume">Lädt...</span> €</p>
+
+        <button onclick="window.history.back()" class="mt-4 px-4 py-2 bg-gray-700 text-white font-bold rounded-md">⬅ Zurück</button>
+
+        <h2 class="text-xl font-semibold text-yellow-400 mt-6">💰 Kauf & Verkauf</h2>
+        <div class="flex justify-center gap-4 mt-4">
+            <form method="POST" action="/trade/buy" class="flex flex-col items-center">
+                <input type="hidden" name="currency" value="{{ crypto_name }}">
+                <input type="number" name="amount" step="0.0001" placeholder="Menge" required class="px-4 py-2 text-black rounded-md border border-gray-400">
+                <button type="submit" class="mt-2 px-4 py-2 bg-green-500 text-white font-bold rounded-md">Kaufen</button>
+            </form>
+            <form method="POST" action="/trade/sell" class="flex flex-col items-center">
+                <input type="hidden" name="currency" value="{{ crypto_name }}">
+                <input type="number" name="amount" step="0.0001" placeholder="Menge" required class="px-4 py-2 text-black rounded-md border border-gray-400">
+                <button type="submit" class="mt-2 px-4 py-2 bg-red-500 text-white font-bold rounded-md">Verkaufen</button>
+            </form>
+        </div>
+
+        <h2 class="text-xl font-semibold text-yellow-400 mt-6">📉 Stop-Loss & Take-Profit</h2>
+        <div class="flex justify-center gap-4 mt-4">
+            <input type="number" id="stopLoss" step="0.0001" placeholder="Stop-Loss" class="px-4 py-2 text-black rounded-md border border-gray-400">
+            <input type="number" id="takeProfit" step="0.0001" placeholder="Take-Profit" class="px-4 py-2 text-black rounded-md border border-gray-400">
+            <button class="px-4 py-2 bg-yellow-500 text-black font-bold rounded-md">Stop-Loss setzen</button>
+            <button class="px-4 py-2 bg-blue-500 text-white font-bold rounded-md">Take-Profit setzen</button>
+        </div>
+
+        <!-- Chart für Preisverlauf -->
+        <canvas id="cryptoChart" class="mt-6"></canvas>
+    </div>
+
+    <script>
+        let chart;
+        let chartData = [];
+        let cryptoName = "{{ crypto_name | safe }}";
+
+        async function fetchCryptoDetails() {
+            try {
+                let response = await fetch(`/price/${cryptoName}`);
+                let data = await response.json();
+
+                let cryptoData = data[cryptoName];
+                if (cryptoData) {
+                    // Korrekte Formatierung für Preis und Volumen mit 6 Nachkommastellen
+                    const formattedPrice = parseFloat(cryptoData.price.replace(',', '.')).toLocaleString("de-DE", {
+                        minimumFractionDigits: 6,
+                        maximumFractionDigits: 6
+                    });
+
+                    const formattedVolume = parseFloat(cryptoData.volume.replace(',', '.')).toLocaleString("de-DE", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    });
+
+                    document.getElementById("cryptoPrice").innerText = `${formattedPrice} €`;
+                    document.getElementById("cryptoVolume").innerText = `${formattedVolume} €`;
+
+                    // Aktualisiere die Chart-Daten
+                    updateChartData(parseFloat(cryptoData.price.replace(',', '.')));
+                } else {
+                    throw new Error("Ungültige Datenstruktur");
+                }
+            } catch (error) {
+                console.error("Fehler beim Abrufen der Daten:", error);
+                document.getElementById("cryptoPrice").innerText = "N/A";
+                document.getElementById("cryptoVolume").innerText = "N/A";
+            }
+        }
+
+        function createChart() {
+            let ctx = document.getElementById("cryptoChart").getContext("2d");
+            chart = new Chart(ctx, {
+                type: "line",
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: "Preis (€)",
+                        data: [],
+                        borderColor: "yellow",
+                        backgroundColor: "rgba(255, 223, 88, 0.2)",
+                        tension: 0.3,
+                        pointRadius: 3,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            title: { display: true, text: "Zeit" }
+                        },
+                        y: {
+                            title: { display: true, text: "Preis (€)" }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: true }
+                    }
+                }
+            });
+        }
+
+        function updateChartData(newPrice) {
+            let dataset = chart.data.datasets[0];
+            let now = new Date().toLocaleTimeString();
+
+            if (chart.data.labels.length >= 20) {
+                chart.data.labels.shift();
+                dataset.data.shift();
+            }
+
+            chart.data.labels.push(now);
+            dataset.data.push(newPrice);
+            chart.update();
+        }
+
+        createChart();
+        setInterval(fetchCryptoDetails, 5000);
+        fetchCryptoDetails();
+    </script>
+</body>
+</html>
